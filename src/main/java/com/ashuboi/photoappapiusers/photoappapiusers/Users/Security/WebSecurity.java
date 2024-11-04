@@ -60,13 +60,15 @@ public class WebSecurity {
                         .requestMatchers(new AntPathRequestMatcher("/users/**"))
                         .access(ipAddressAuthorizationManager(gatewayIp))
                         .anyRequest().authenticated());
+        http.authenticationManager(authenticationManager);
 
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http.headers(header -> header.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
 
+
         AuthenticationFilter authenticationFilter = new AuthenticationFilter(userService, environment, authenticationManager);
-        http.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilter(authenticationFilter);
         return http.build();
     }
     // Custom AuthorizationManager to restrict access by IP address
