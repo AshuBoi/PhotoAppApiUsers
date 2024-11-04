@@ -2,8 +2,10 @@ package com.ashuboi.photoappapiusers.photoappapiusers.Users.Security;
 
 import com.ashuboi.photoappapiusers.photoappapiusers.Users.Service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -43,36 +45,30 @@ public class WebSecurity {
     // eg: we send a ship request to one of our API endpoints, Spring framework will take this request through a chain
     // of http filters, and one of these filters will validate request against security config that we create in this method
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        AuthenticationManagerBuilder authenticationManagerBuilder =
-                http.getSharedObject(AuthenticationManagerBuilder.class);
-        authenticationManagerBuilder
-                .userDetailsService(userService)
-                .passwordEncoder(bCryptPasswordEncoder);
-
+    protected SecurityFilterChain configure(HttpSecurity http) throws Exception {
+        AuthenticationManagerBuilder authenticationManagerBuilder = http.getSharedObject(AuthenticationManagerBuilder.class);
+        authenticationManagerBuilder.userDetailsService(userService).passwordEncoder(bCryptPasswordEncoder);
         AuthenticationManager authenticationManager = authenticationManagerBuilder.build();
-
-        // Instantiate your custom AuthenticationFilter with necessary dependencies
-        AuthenticationFilter authenticationFilter = new AuthenticationFilter(authenticationManager, userService, environment);
-        authenticationFilter.setFilterProcessesUrl(environment.getProperty("login.url.path"));
 
         String gatewayIp = environment.getProperty("gateway.ip");
 
-        http
-                .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(authorize -> authorize
+        http.csrf(AbstractHttpConfigurer::disable);
+
+        http.authorizeHttpRequests(auth ->
+                auth.requestMatchers(PathRequest.toH2Console(),
+                        AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/users")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/users/**"))
                         .access(ipAddressAuthorizationManager(gatewayIp))
-                        .requestMatchers(new AntPathRequestMatcher("/h2-console/**")).permitAll()
-                        .anyRequest().authenticated()
-                )
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
+                        .anyRequest().authenticated());
 
+        http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+
+        http.headers(header -> header.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
+
+        AuthenticationFilter authenticationFilter = new AuthenticationFilter(userService, environment, authenticationManager);
+        http.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
-
     // Custom AuthorizationManager to restrict access by IP address
     private AuthorizationManager<RequestAuthorizationContext> ipAddressAuthorizationManager(String ipAddress) {
         return (authentication, context) -> {
@@ -81,4 +77,5 @@ public class WebSecurity {
             return new AuthorizationDecision(allowed);
         };
     }
+
 }

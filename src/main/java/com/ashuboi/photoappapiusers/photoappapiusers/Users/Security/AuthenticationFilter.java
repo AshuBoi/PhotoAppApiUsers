@@ -24,33 +24,38 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+
 
 import javax.crypto.SecretKey;
 
 public class AuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 
-    private final UserService userService;
-    private final Environment environment;
+    private UserService userService;
+    private Environment environment;
 
-    public AuthenticationFilter(AuthenticationManager authenticationManager, UserService userService, Environment environment) {
-        super.setAuthenticationManager(authenticationManager);
+    public AuthenticationFilter(UserService userService,
+                                Environment environment,
+                                AuthenticationManager authenticationManager) {
         this.userService = userService;
         this.environment = environment;
+        super.setAuthenticationManager(authenticationManager);
     }
 
     @Override
-    public Authentication attemptAuthentication(HttpServletRequest req, HttpServletResponse res) throws AuthenticationException {
+    public Authentication attemptAuthentication(HttpServletRequest req,
+                                                HttpServletResponse res) throws AuthenticationException {
         try {
-            LoginRequestModel creds = new ObjectMapper().readValue(req.getInputStream(), LoginRequestModel.class);
+
+            LoginRequestModel creds = new ObjectMapper()
+                    .readValue(req.getInputStream(), LoginRequestModel.class);
 
             return getAuthenticationManager().authenticate(
                     new UsernamePasswordAuthenticationToken(
                             creds.getEmail(),
                             creds.getPassword(),
-                            new ArrayList<>()
-                    )
+                            new ArrayList<>())
             );
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
