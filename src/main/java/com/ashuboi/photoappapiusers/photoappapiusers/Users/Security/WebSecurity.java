@@ -1,24 +1,26 @@
 package com.ashuboi.photoappapiusers.photoappapiusers.Users.Security;
 
+import com.ashuboi.photoappapiusers.photoappapiusers.Users.Service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.web.SecurityFilterChain;
-import com.ashuboi.photoappapiusers.photoappapiusers.Users.Service.UserService;
-import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
-import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.context.annotation.Bean;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
+
 
 @Configuration
 @EnableWebSecurity
@@ -54,29 +56,29 @@ public class WebSecurity {
         AuthenticationFilter authenticationFilter = new AuthenticationFilter(authenticationManager, userService, environment);
         authenticationFilter.setFilterProcessesUrl(environment.getProperty("login.url.path"));
 
-        // Configure HTTP security
-        http.csrf().disable()
-                .authorizeRequests()
-                .requestMatchers(new AntPathRequestMatcher("/users/**"))
-                .hasIpAddress(environment.getProperty("gateway.ip"))
-                .antMatchers("/h2-console/**").permitAll()
-                .anyRequest().authenticated()
-                .and()
-                .sessionManagement()
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                .and()
-                .addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        String gatewayIp = environment.getProperty("gateway.ip");
 
-        // Allow H2 console frame options for browser access
-        http.headers().frameOptions().sameOrigin();
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(new AntPathRequestMatcher("/users/**"))
+                        .access(ipAddressAuthorizationManager(gatewayIp))
+                        .requestMatchers(new AntPathRequestMatcher("/h2-console/**")).permitAll()
+                        .anyRequest().authenticated()
+                )
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
 
         return http.build();
     }
 
-    @Bean
-    public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
-        AuthenticationManagerBuilder auth = http.getSharedObject(AuthenticationManagerBuilder.class);
-        auth.userDetailsService(userService).passwordEncoder(bCryptPasswordEncoder);
-        return auth.build();
+    // Custom AuthorizationManager to restrict access by IP address
+    private AuthorizationManager<RequestAuthorizationContext> ipAddressAuthorizationManager(String ipAddress) {
+        return (authentication, context) -> {
+            IpAddressMatcher ipAddressMatcher = new IpAddressMatcher(ipAddress);
+            boolean allowed = ipAddressMatcher.matches(context.getRequest());
+            return new AuthorizationDecision(allowed);
+        };
     }
 }
