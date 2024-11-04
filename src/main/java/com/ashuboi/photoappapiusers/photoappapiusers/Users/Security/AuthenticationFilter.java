@@ -1,7 +1,9 @@
 package com.ashuboi.photoappapiusers.photoappapiusers.Users.Security;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Objects;
 
@@ -63,15 +65,20 @@ public class AuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 
     @Override
     protected void successfulAuthentication(HttpServletRequest req, HttpServletResponse res, FilterChain chain, Authentication auth) throws IOException, ServletException {
-        String username = ((User) auth.getPrincipal()).getUsername();
-        UserDto userDetails = userService.getUserByEmail(username);
-
-        byte[] secretKeyBytes = Objects.requireNonNull(environment.getProperty("token.secret")).getBytes();
+        String userName = ((User) auth.getPrincipal()).getUsername();
+        UserDto userDetails = userService.getUserByEmail(userName);
+        String tokenSecret = environment.getProperty("token.secret");
+        byte[] secretKeyBytes = Base64.getEncoder().encode(tokenSecret.getBytes());
         SecretKey secretKey = Keys.hmacShaKeyFor(secretKeyBytes);
 
+        Instant now = Instant.now();
+
         String token = Jwts.builder()
+                .claim("scope", auth.getAuthorities())
                 .subject(userDetails.getUserId())
-                .expiration(new Date(System.currentTimeMillis() + Long.parseLong(Objects.requireNonNull(environment.getProperty("token.expiration_time")))))
+                .expiration(
+                        Date.from(now.plusMillis(Long.parseLong(Objects.requireNonNull(environment.getProperty("token.expiration_time"))))))
+                .issuedAt(Date.from(now))
                 .signWith(secretKey)
                 .compact();
 

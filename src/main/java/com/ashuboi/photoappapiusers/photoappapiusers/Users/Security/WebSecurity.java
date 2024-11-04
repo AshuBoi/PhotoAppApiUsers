@@ -56,7 +56,7 @@ public class WebSecurity {
 
         http.authorizeHttpRequests(auth ->
                 auth.requestMatchers(PathRequest.toH2Console(),
-                        AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/users")).permitAll()
+                                AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/users")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/users/**"))
                         .access(ipAddressAuthorizationManager(gatewayIp))
                         .anyRequest().authenticated());
@@ -71,6 +71,7 @@ public class WebSecurity {
         http.addFilter(authenticationFilter);
         return http.build();
     }
+
     // Custom AuthorizationManager to restrict access by IP address
     private AuthorizationManager<RequestAuthorizationContext> ipAddressAuthorizationManager(String ipAddress) {
         return (authentication, context) -> {
@@ -79,5 +80,4 @@ public class WebSecurity {
             return new AuthorizationDecision(allowed);
         };
     }
-
 }
